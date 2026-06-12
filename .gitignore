@@ -1,3 +1,9 @@
 /.direnv
-/data
+
 /models
+
+/data/logos/
+/data/logos-old/
+/data/logos.zip
+/data/logos.csv
+/data/text_only.csv
