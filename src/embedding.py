@@ -47,9 +47,11 @@ def load_image(path):
     return image
 
 
-def load_similarity_model():
+def load_similarity_model(model_path=None):
     model = models.vgg16(weights=models.VGG16_Weights.DEFAULT).to(device)
     model.eval()
+    if model_path is not None:
+        load_model(model, model_path)
     return model
 
 
@@ -116,9 +118,11 @@ def data_loader(data_dir, batch_size, frames_limit=None, shuffle=True):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str)
     parser.add_argument('--batch-size', type=int)
     parser.add_argument('--logos-path', type=str)
     parser.add_argument('--logos-limit', type=int)
+    parser.add_argument('--target', type=str)
     args = parser.parse_args()
 
     print('Running on device', device)
@@ -127,6 +131,13 @@ def main():
     if batch_size is None:
         batch_size = 16
 
+    target = args.target
+    if target is None:
+        target = 'models/logos_embedding.pt'
+    target_path, _ = os.path.splitext(target)
+    embeddings_path = target_path + '.pt'
+    embeddings_paths_path = target_path + '.csv'
+    print(f'Saving embeddings to `{embeddings_path}` and `{embeddings_paths_path}`')
 
     logos_path = args.logos_path
     if logos_path is None:
@@ -137,13 +148,13 @@ def main():
 
     loader = data_loader(logos_path, batch_size, frames_limit=args.logos_limit)
 
-    model = load_similarity_model()
+    model = load_similarity_model(args.model)
 
     embeddings, embedding_paths = generate_embeddings(model, loader)
 
-    print('Saving embeddings to `models/logos_embedding.pt` and `models/logos_embedding.csv`')
-    torch.save(embeddings, 'models/logos_embedding.pt')
-    pd.DataFrame(embedding_paths).to_csv('models/logos_embedding.csv', header=None, index=False)
+    torch.save(embeddings, embeddings_path)
+    pd.DataFrame(embedding_paths).to_csv(embeddings_paths_path, header=None, index=False)
+    print('Embeddings saved')
 
 
 if __name__ == '__main__':
