@@ -34,12 +34,12 @@ def compute_similarity(image_path, embeddings, embeddings_paths):
     return similarity_vec(embeddings)
 
 
-def evaluate_model_on(dataset_path, embeddings, embeddings_paths):
+def evaluate_model_on(dataset_path, embeddings, embeddings_paths, top):
     # Load dataset
     sim_df = pd.read_csv(dataset_path, header=None, index_col=None)
     sim_df = [group.split(' ') for _, row in sim_df.items() for group in row]
 
-    # Test for top-10 hits
+    # Test for top-n hits
     total_checks = 0
     misses = []
     for paths in tqdm(sim_df):
@@ -50,7 +50,7 @@ def evaluate_model_on(dataset_path, embeddings, embeddings_paths):
             # Test i->j
             similarities = compute_similarity(path_i_real, embeddings, embeddings_paths).cpu().numpy().flatten()
             top_images = np.argsort(similarities)[::-1]
-            top_n = 10
+            top_n = top
             top_paths = [embeddings_paths[i] for i in top_images[:top_n]]
             total_checks += 1
             if os.path.join('data/logos/', path_j) not in top_paths:
@@ -59,7 +59,7 @@ def evaluate_model_on(dataset_path, embeddings, embeddings_paths):
             # Test j->i
             similarities = compute_similarity(path_j_real, embeddings, embeddings_paths).cpu().numpy().flatten()
             top_images = np.argsort(similarities)[::-1]
-            top_n = 10
+            top_n = top
             top_paths = [embeddings_paths[i] for i in top_images[:top_n]]
             total_checks += 1
             if os.path.join('data/logos/', path_i) not in top_paths:
@@ -70,27 +70,27 @@ def evaluate_model_on(dataset_path, embeddings, embeddings_paths):
     print(f'^- Accuracy: {accuracy * 100.0:.2f}%')
 
 
-def evaluate_model(embeddings, embeddings_paths):
+def evaluate_model(embeddings, embeddings_paths, top):
     print('Evaluating the model...')
 
     print('1. Testing (validation part)...')
-    evaluate_model_on('data/similar_valid.csv', embeddings, embeddings_paths)
+    evaluate_model_on('data/similar_valid.csv', embeddings, embeddings_paths, top)
 
     print('2. Testing (full dataset)...')
-    evaluate_model_on('data/similar.csv', embeddings, embeddings_paths)
+    evaluate_model_on('data/similar.csv', embeddings, embeddings_paths, top)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--embeddings-path', type=str)
-    parser.add_argument('--batch-size', type=int)
+    parser.add_argument('--top', type=int)
     args = parser.parse_args()
 
     print('Running on device', device)
 
-    batch_size = args.batch_size
-    if batch_size is None:
-        batch_size = 16
+    top = args.top
+    if top is None:
+        top = 10
 
     embeddings_path = args.embeddings_path
     if embeddings_path is None:
@@ -107,7 +107,7 @@ def main():
     embeddings = torch.load(embeddings_path)
     embeddings_paths = pd.read_csv(embeddings_paths_path, header=None, index_col=None)[0].tolist()
 
-    evaluate_model(embeddings, embeddings_paths)
+    evaluate_model(embeddings, embeddings_paths, top)
 
 
 if __name__ == '__main__':

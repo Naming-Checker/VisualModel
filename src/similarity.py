@@ -58,9 +58,11 @@ def compute_similarity(image_path, embeddings, model):
     return similarity_vec(embeddings)
 
 
-def load_similarity_model():
+def load_similarity_model(model_path=None):
     model = models.vgg16(weights=models.VGG16_Weights.DEFAULT).to(device)
     model.eval()
+    if model_path is not None:
+        load_model(model, model_path)
     return model
 
 
@@ -68,7 +70,7 @@ def load_similarity_model():
 #
 # Returns ([float], [str])
 # tuple of similarity values and image paths (not sorted)
-def calculate_similarity(image_path, embeddings_path=None):
+def calculate_similarity(image_path, model_path=None, embeddings_path=None):
     if embeddings_path is None:
         embeddings_path = 'models/logos_embedding.pt'
     embeddings_path_root, _ = os.path.splitext(embeddings_path)
@@ -83,7 +85,7 @@ def calculate_similarity(image_path, embeddings_path=None):
     embeddings = torch.load(embeddings_path)
     embeddings_paths = pd.read_csv(embeddings_paths_path, header=None, index_col=None)[0].tolist()
 
-    model = load_similarity_model()
+    model = load_similarity_model(model_path)
 
     # Compute
     similarities = compute_similarity(image_path, embeddings, model).cpu().numpy().flatten()
@@ -93,6 +95,7 @@ def calculate_similarity(image_path, embeddings_path=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('image_path', type=str)
+    parser.add_argument('--model', type=str)
     parser.add_argument('--embeddings-path', type=str)
     parser.add_argument('--batch-size', type=int)
     parser.add_argument('--top', type=int)
@@ -104,7 +107,7 @@ def main():
     if batch_size is None:
         batch_size = 16
 
-    similarities, embeddings_paths = calculate_similarity(args.image_path, args.embeddings_path)
+    similarities, embeddings_paths = calculate_similarity(args.image_path, args.model, args.embeddings_path)
     top_images = np.argsort(similarities)[::-1]
 
     # Extract
