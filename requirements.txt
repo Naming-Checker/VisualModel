@@ -8,3 +8,5 @@ torch
 torchvision
 matplotlib
 scikit-learn
+color-analysis-tool
+scipy
