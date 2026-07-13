@@ -1,6 +1,3 @@
-import os
-import sys
-
 import argparse
 from color_analysis_tool import ImageAnalyzer, ImageInfo
 #from matplotlib.colors import rgb_to_hsv
@@ -121,7 +118,8 @@ def main():
         print(f"\nImage B {args.compare}:")
         for color in info_b.colors:
             print(f"- RGB: {color.rgb}, HEX: {color.hex}, Frequency: {color.frequency}%")
-        print(f"\Distance: {distance}")
+        print(f"\nDistance: {distance}")
+        print(f"Similarity: {1.0 / (1.0 + distance) * 100.0 : .2f}%")
     else:
         # Analyse single image
         info = analyse_colors(args.image_path, palette_size)
