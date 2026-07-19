@@ -108,24 +108,10 @@ def to_distribution(info: ImageInfo):
 def similarity(args):
     colors, weights, other_colors, other_weights = args
     distance = wasserstein_distance_nd(colors, other_colors, weights, other_weights)
-    if 1.0 / (1.0 + distance) > 0.99:
-        print('Super similarity:')
-        print(colors)
-        print(weights)
-        print(other_colors)
-        print(other_weights)
     return 1.0 / (1.0 + distance)
 
 
-def compute_similarity(image_path, palette_size, embeddings):
-    info = analyse_colors(image_path, palette_size)
-    (image_colors, image_weights) = to_distribution(info)
-
-    # Print image analysis
-    for color in info.colors:
-        print(f"RGB: {color.rgb}, HEX: {color.hex}, Frequency: {color.frequency}%")
-
-    print("\nConverting embeddings...")
+def convert_embeddings(embeddings, palette_size):
     embed_colors = []
     embed_weights = []
     for _, row in tqdm(embeddings.iterrows(), total=len(embeddings)):
@@ -135,8 +121,11 @@ def compute_similarity(image_path, palette_size, embeddings):
         embed_weights.append(weights + [0.0] * missing)
         assert len(embed_colors[-1]) == palette_size
         assert len(embed_weights[-1]) == palette_size
+    return embed_colors, embed_weights
 
-    print("Calculating similarity...")
+
+# Use this with preconverted embeddings and color analysis
+def compute_similarity_preconverted(image_colors, image_weights, embed_colors, embed_weights):
     with mp.Pool(mp.cpu_count()) as pool:
         tasks = [
             (image_colors, image_weights, other_c, other_w) 
@@ -145,6 +134,22 @@ def compute_similarity(image_path, palette_size, embeddings):
         it = pool.imap(similarity, tasks, chunksize=10)
         embeddings = list(tqdm(it, total=len(embed_colors)))
     return embeddings
+
+
+# Use this with preloaded embeddings (they will be converted to the internal format).
+def compute_similarity(image_path, palette_size, embeddings):
+    info = analyse_colors(image_path, palette_size)
+    (image_colors, image_weights) = to_distribution(info)
+
+    # Print image analysis
+    for color in info.colors:
+        print(f"RGB: {color.rgb}, HEX: {color.hex}, Frequency: {color.frequency}%")
+
+    print("Converting embeddings...")
+    embed_colors, embed_weights = convert_embeddings(embeddings, palette_size)
+
+    print("Calculating similarity...")
+    return compute_similarity_preconverted(image_colors, image_weights, embed_colors, embed_weights)
 
 
 # Use this for API calls
