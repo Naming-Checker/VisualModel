@@ -1,3 +1,5 @@
+import similarity_colors
+
 import os
 import sys
 
@@ -21,7 +23,7 @@ import torchvision.transforms.functional as F
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def compute_similarity(image_path, embeddings, embeddings_paths):
+def compute_similarity_basic(image_path, embeddings, embeddings_paths):
     # image = load_image(image_path)
     # encoded = model.to(device)(image.unsqueeze(0).to(device)).detach()
     idx = embeddings_paths.index(image_path)
@@ -34,7 +36,29 @@ def compute_similarity(image_path, embeddings, embeddings_paths):
     return similarity_vec(embeddings)
 
 
-def evaluate_model_on(dataset_path, embeddings, embeddings_paths, top):
+def compute_similarity(image_path, embeddings, embed_colors, embed_weights, palette_size, embeddings_paths):
+    basic_sim = compute_similarity_basic(image_path, embeddings, embeddings_paths).cpu().numpy().flatten()
+
+    image_info = similarity_colors.analyse_colors(image_path, palette_size)
+    (image_colors, image_weights) = similarity_colors.to_distribution(image_info)
+    color_sim = similarity_colors.compute_similarity_preconverted(image_colors, image_weights, embed_colors, embed_weights)
+
+    # Combine metrics
+    assert len(basic_sim) == len(color_sim)
+    k = 5 # the factor of the color curve, bigger number - less impact at lower values
+    m = 0.05 # extra multiplier to reduce max impact of the color similarity
+    similarities = []
+    for i in range(len(basic_sim)):
+        b = basic_sim[i]
+        c = color_sim[i]
+        f = c ** k * m
+        value = b * (1.0 - f) + f * c
+        similarities.append(value)
+
+    return similarities
+
+
+def evaluate_model_on(dataset_path, embeddings, embed_colors, embed_weights, palette_size, embeddings_paths, top):
     # Load dataset
     sim_df = pd.read_csv(dataset_path, header=None, index_col=None)
     sim_df = [group.split(' ') for _, row in sim_df.items() for group in row]
@@ -48,7 +72,7 @@ def evaluate_model_on(dataset_path, embeddings, embeddings_paths, top):
             path_j_real = os.path.join('data/logos/', path_j)
 
             # Test i->j
-            similarities = compute_similarity(path_i_real, embeddings, embeddings_paths).cpu().numpy().flatten()
+            similarities = compute_similarity(path_i_real, embeddings, embed_colors, embed_weights, palette_size, embeddings_paths)
             top_images = np.argsort(similarities)[::-1]
             top_n = top
             top_paths = [embeddings_paths[i] for i in top_images[:top_n]]
@@ -57,7 +81,7 @@ def evaluate_model_on(dataset_path, embeddings, embeddings_paths, top):
                 misses.append((path_i_real, path_j_real))
 
             # Test j->i
-            similarities = compute_similarity(path_j_real, embeddings, embeddings_paths).cpu().numpy().flatten()
+            similarities = compute_similarity(path_j_real, embeddings, embed_colors, embed_weights, palette_size, embeddings_paths)
             top_images = np.argsort(similarities)[::-1]
             top_n = top
             top_paths = [embeddings_paths[i] for i in top_images[:top_n]]
@@ -70,20 +94,25 @@ def evaluate_model_on(dataset_path, embeddings, embeddings_paths, top):
     print(f'^- Accuracy: {accuracy * 100.0:.2f}%')
 
 
-def evaluate_model(embeddings, embeddings_paths, top):
+def evaluate_model(embeddings, embeddings_color, palette_size, embeddings_paths, top):
+    print('Converting embeddings...')
+    # Convert color embeddings
+    embed_colors, embed_weights = similarity_colors.convert_embeddings(embeddings_color, palette_size)
+
     print('Evaluating the model...')
 
     print('1. Testing (validation part)...')
-    evaluate_model_on('data/similar_valid.csv', embeddings, embeddings_paths, top)
+    evaluate_model_on('data/similar_valid.csv', embeddings, embed_colors, embed_weights, palette_size, embeddings_paths, top)
 
     print('2. Testing (full dataset)...')
-    evaluate_model_on('data/similar.csv', embeddings, embeddings_paths, top)
+    evaluate_model_on('data/similar.csv', embeddings, embed_colors, embed_weights, palette_size, embeddings_paths, top)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--embeddings-path', type=str)
     parser.add_argument('--top', type=int)
+    parser.add_argument('--palette-size', type=int)
     args = parser.parse_args()
 
     print('Running on device', device)
@@ -92,22 +121,31 @@ def main():
     if top is None:
         top = 10
 
+    palette_size = args.palette_size
+    if palette_size is None:
+        palette_size = 8
+
     embeddings_path = args.embeddings_path
     if embeddings_path is None:
         embeddings_path = 'models/logos_embedding.pt'
     embeddings_path_root, _ = os.path.splitext(embeddings_path)
     embeddings_paths_path = embeddings_path_root + '.csv'
+    embeddings_color_path = embeddings_path_root + '_colors.csv'
     if not os.path.exists(embeddings_path):
         print(f'Embeddings at `{embeddings_path}` not found')
         sys.exit(1)
     if not os.path.exists(embeddings_paths_path):
         print(f'Embeddings paths csv file at `{embeddings_paths_path}` not found')
         sys.exit(1)
+    if not os.path.exists(embeddings_color_path):
+        print(f'Color embeddings csv file at `{embeddings_color_path}` not found')
+        sys.exit(1)
 
     embeddings = torch.load(embeddings_path)
     embeddings_paths = pd.read_csv(embeddings_paths_path, header=None, index_col=None)[0].tolist()
+    embeddings_color = pd.read_csv(embeddings_color_path, header=None, index_col=None)
 
-    evaluate_model(embeddings, embeddings_paths, top)
+    evaluate_model(embeddings, embeddings_color, palette_size, embeddings_paths, top)
 
 
 if __name__ == '__main__':
