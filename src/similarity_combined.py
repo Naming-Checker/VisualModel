@@ -57,17 +57,7 @@ def calculate_similarity(image_path, model_path=None, embeddings_path=None, pale
     color_sim = similarity_colors.compute_similarity(image_path, palette_size, color_embeddings)
 
     # Combine metrics
-    assert len(basic_sim) == len(color_sim)
-    k = 3 # the factor of the color curve, bigger number - less impact at lower values
-    m = 0.1 # extra multiplier to reduce max impact of the color similarity
-    similarities = []
-    for i in range(len(basic_sim)):
-        b = basic_sim[i]
-        c = color_sim[i]
-        f = c ** k * m
-        value = b * (1.0 - f) + f * c
-        similarities.append(value)
-
+    similarities = similarity_colors.combine_metrics(basic_sim, color_sim)
     return similarities, embeddings_paths
 
 
