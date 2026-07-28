@@ -125,15 +125,34 @@ def convert_embeddings(embeddings, palette_size):
 
 
 # Use this with preconverted embeddings and color analysis
-def compute_similarity_preconverted(image_colors, image_weights, embed_colors, embed_weights):
+def compute_similarity_preconverted(image_colors, image_weights, embed_colors, embed_weights, tqdm_on=True):
     with mp.Pool(mp.cpu_count()) as pool:
         tasks = [
             (image_colors, image_weights, other_c, other_w) 
             for other_c, other_w in zip(embed_colors, embed_weights)
         ]
         it = pool.imap(similarity, tasks, chunksize=10)
-        embeddings = list(tqdm(it, total=len(embed_colors)))
+        if tqdm_on:
+            embeddings = list(tqdm(it, total=len(embed_colors)))
+        else:
+            embeddings = list(it)
     return embeddings
+
+
+def combine_metrics(basic_sim, color_sim):
+    median_color_sim = np.median(color_sim)
+
+    assert len(basic_sim) == len(color_sim)
+    k = 7 # the factor of the color curve, bigger number - less impact at lower values
+    m = 0.1 * (1.0 - median_color_sim) # extra multiplier to reduce max impact of the color similarity
+    similarities = []
+    for i in range(len(basic_sim)):
+        b = basic_sim[i]
+        c = color_sim[i]
+        f = c ** k * m
+        value = b * (1.0 - f) + f * c
+        similarities.append(value)
+    return similarities
 
 
 # Use this with preloaded embeddings (they will be converted to the internal format).

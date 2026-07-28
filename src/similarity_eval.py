@@ -44,18 +44,7 @@ def compute_similarity(image_path, embeddings, embed_colors, embed_weights, pale
     color_sim = similarity_colors.compute_similarity_preconverted(image_colors, image_weights, embed_colors, embed_weights)
 
     # Combine metrics
-    assert len(basic_sim) == len(color_sim)
-    k = 5 # the factor of the color curve, bigger number - less impact at lower values
-    m = 0.05 # extra multiplier to reduce max impact of the color similarity
-    similarities = []
-    for i in range(len(basic_sim)):
-        b = basic_sim[i]
-        c = color_sim[i]
-        f = c ** k * m
-        value = b * (1.0 - f) + f * c
-        similarities.append(value)
-
-    return similarities
+    return similarity_colors.combine_metrics(basic_sim, color_sim)
 
 
 def evaluate_model_on(dataset_path, embeddings, embed_colors, embed_weights, palette_size, embeddings_paths, top):
@@ -66,8 +55,10 @@ def evaluate_model_on(dataset_path, embeddings, embed_colors, embed_weights, pal
     # Test for top-n hits
     total_checks = 0
     misses = []
-    for paths in tqdm(sim_df):
-        for path_i, path_j in zip(paths, paths[1:]):
+    for (group_i, paths) in tqdm(enumerate(sim_df)):
+        print(f'\nGroup {group_i + 1} / {len(sim_df)}')
+        for i, (path_i, path_j) in enumerate(zip(paths, paths[1:])):
+            print(f'^- {i + 1} / {len(paths)}')
             path_i_real = os.path.join('data/logos/', path_i)
             path_j_real = os.path.join('data/logos/', path_j)
 
@@ -101,8 +92,8 @@ def evaluate_model(embeddings, embeddings_color, palette_size, embeddings_paths,
 
     print('Evaluating the model...')
 
-    print('1. Testing (validation part)...')
-    evaluate_model_on('data/similar_valid.csv', embeddings, embed_colors, embed_weights, palette_size, embeddings_paths, top)
+    # print('1. Testing (validation part)...')
+    # evaluate_model_on('data/similar_valid.csv', embeddings, embed_colors, embed_weights, palette_size, embeddings_paths, top)
 
     print('2. Testing (full dataset)...')
     evaluate_model_on('data/similar.csv', embeddings, embed_colors, embed_weights, palette_size, embeddings_paths, top)
